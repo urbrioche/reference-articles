@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI 高可擴展性架構與防腐設計指南</title>
+    <style>
+        :root {
+            --primary: #059669;
+            --primary-hover: #047857;
+            --bg-color: #f8fafc;
+            --text-color: #334155;
+            --code-bg: #1e293b;
+            --border: #e2e8f0;
+            --sidebar-width: 260px;
+        }
+        
+        html {
+            scroll-behavior: smooth; /* 點擊目錄時平滑捲動 */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 雙欄排版設定 */
+        .layout-container {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            gap: 3rem;
+        }
+
+        /* 側邊欄目錄 (固定在畫面上方) */
+        .sidebar {
+            width: var(--sidebar-width);
+            flex-shrink: 0;
+            position: sticky;
+            top: 2rem;
+            height: calc(100vh - 4rem);
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            color: #0f172a;
+            margin-top: 0;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 0.5rem;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.8rem;
+        }
+
+        .sidebar a {
+            text-decoration: none;
+            color: #475569;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+            display: block;
+        }
+        
+        .sidebar a:hover {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .sidebar .sub-menu {
+            padding-left: 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            border-left: 1px solid var(--border);
+        }
+
+        /* 主內容區 */
+        .main-content {
+            flex: 1;
+            min-width: 0; /* 防止表格撐破 Flex 容器 */
+            background: white;
+            padding: 2rem 3rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        h1 { color: var(--primary); margin-top: 0; }
+        h2 { color: #0f172a; margin-top: 3rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+        h2::before { content: "#"; color: var(--primary); margin-right: 0.5rem; opacity: 0.5; }
+        h3 { color: #334155; margin-top: 2rem; }
+        
+        /* 表格設定 */
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: #f1f5f9; font-weight: 600; color: #0f172a; }
+        tr:hover { background-color: #f8fafc; }
+
+        /* 程式碼與收合區塊設定 */
+        p code, li code, td code { background-color: #f1f5f9; color: #b91c1c; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.9em; font-family: monospace; }
+        
+        details {
+            background-color: var(--code-bg);
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        summary {
+            background-color: #334155;
+            color: #f8fafc;
+            padding: 0.8rem 1.2rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+
+        summary:hover {
+            background-color: #475569;
+        }
+
+        pre { 
+            color: #f8fafc; 
+            padding: 1.2rem 1.5rem; 
+            margin: 0;
+            overflow-x: auto; 
+            font-size: 0.9rem; 
+            line-height: 1.5; 
+            font-family: ui-monospace, monospace;
+        }
+
+        .highlight { background-color: #ecfdf5; padding: 1.2rem; border-left: 4px solid var(--primary); border-radius: 4px; margin: 1.5rem 0; color: #065f46;}
+        
+        /* 響應式設計 (手機版隱藏側邊欄) */
+        @media (max-width: 768px) {
+            .layout-container { flex-direction: column; padding: 1rem; gap: 1.5rem; }
+            .sidebar { position: static; width: 100%; height: auto; border-bottom: 2px solid var(--border); padding-bottom: 1rem; }
+            .main-content { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="layout-container">
+    
+    <!-- 側邊欄目錄 -->
+    <aside class="sidebar">
+        <h3>📄 目錄導覽</h3>
+        <nav>
+            <ul>
+                <li><a href="#intro">核心心法</a></li>
+                <li><a href="#section-1">1. 分層職責與命名矩陣</a></li>
+                <li><a href="#section-2">2. 資料流與解耦轉譯模型</a></li>
+                <li>
+                    <a href="#section-3">3. 關鍵防線實作範例</a>
+                    <ul class="sub-menu">
+                        <li><a href="#example-a">A. 統一業務例外 (Exceptions)</a></li>
+                        <li><a href="#example-b">B. Repository 隔離 Raw SQL</a></li>
+                        <li><a href="#example-c">C. 外部 API 防腐層 (Gateway)</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </nav>
+    </aside>
+
+    <!-- 主內容區 -->
+    <main class="main-content">
+        <h1>FastAPI 乾淨架構 (Clean Architecture) 設計指南</h1>
+        <p>本指南彙整了在 FastAPI 專案中實現高內聚、低耦合，並完美防堵抽象洩漏（Leaky Abstraction）的實戰架構心法。</p>
+
+        <div id="intro" class="highlight">
+            <strong>💡 核心心法：防腐層設計 (Anti-Corruption Layer)</strong><br>
+            外層（Router/基礎設施）只能依賴內層（Service/領域），內層絕對不能知道外層（HTTP 框架、資料庫引擎）的存在。所有的資料進出都必須經過「轉譯」。
+        </div>
+
+        <h2 id="section-1">1. 分層職責與命名矩陣</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>架構層級</th>
+                    <th>職責說明</th>
+                    <th>資料載體命名建議</th>
+                    <th>絕對禁止出現</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Router (對外介面)</strong></td>
+                    <td>處理 HTTP 協定，擔任出入境海關轉譯資料。</td>
+                    <td><code>{名詞}Request</code><br><code>{名詞}Response</code></td>
+                    <td>核心業務邏輯、直接呼叫資料庫</td>
+                </tr>
+                <tr>
+                    <td><strong>Service (業務邏輯)</strong></td>
+                    <td>執行核心商業規則，協調 Repository 與外部 API。</td>
+                    <td><code>{動詞}Command</code><br><code>{動作}Query</code></td>
+                    <td>HTTP 狀態碼、Pydantic HTTP 驗證參數</td>
+                </tr>
+                <tr>
+                    <td><strong>Domain (領域模型)</strong></td>
+                    <td>自帶驗證的業務實體與值物件 (Value Objects)。</td>
+                    <td><code>{名詞}Entity</code><br><code>Money</code>, <code>Email</code></td>
+                    <td>任何框架依賴、關聯式資料庫的外鍵概念</td>
+                </tr>
+                <tr>
+                    <td><strong>Repository (資料存取)</strong></td>
+                    <td>封裝資料庫操作 (ORM/Raw SQL)，回傳 Entity。</td>
+                    <td><code>{名詞}ORM</code><br><code>{名詞}Model</code></td>
+                    <td>API Schema、業務邏輯判斷</td>
+                </tr>
+                <tr>
+                    <td><strong>Gateway (外部服務)</strong></td>
+                    <td>封裝對第三方 API 的 HTTP 請求。</td>
+                    <td><code>{第三方}Gateway</code><br><code>{服務}Client</code></td>
+                    <td>核心業務邏輯</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="section-2">2. 資料流與解耦轉譯模型 (CQRS)</h2>
+        <p>嚴格分層下，資料進出必須遵循以下轉譯路徑，確保核心層不被外部框架綁架：</p>
+        <ul>
+            <li><strong>寫入 (POST/PUT)</strong>：HTTP JSON (<code>Request</code>) ➔ Router 轉譯 ➔ <code>Command</code> ➔ Service ➔ <code>Entity</code> ➔ Router 轉譯 ➔ HTTP JSON (<code>Response</code>)</li>
+            <li><strong>讀取 (GET)</strong>：URL Params (<code>Params</code>) ➔ Router 轉譯 ➔ <code>Query</code> ➔ Service ➔ <code>Entity</code> ➔ Router 轉譯 ➔ HTTP JSON (<code>Response</code>)</li>
+        </ul>
+
+        <h2 id="section-3">3. 關鍵防線實作範例</h2>
+        
+        <h3 id="example-a">A. 統一的業務例外處理 (Domain Exceptions)</h3>
+        <p>Service 不該拋出 <code>HTTPException</code>，應拋出自訂領域例外，由 <code>main.py</code> 統一攔截。</p>
+        <!-- 使用 details 標籤實作收合 -->
+        <details>
+            <summary>▶ 點擊展開程式碼：core/exceptions.py 與 main.py</summary>
+<pre><code># core/exceptions.py
+class BaseDomainException(Exception):
+    status_code: int = 400
+    error_code: str = "DOMAIN_ERROR"
+    
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+class InsufficientBalanceError(BaseDomainException):
+    status_code = 400
+    error_code = "INSUFFICIENT_BALANCE"
+
+# main.py 攔截器
+@app.exception_handler(BaseDomainException)
+async def domain_exception_handler(request: Request, exc: BaseDomainException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error_code": exc.error_code, "message": exc.message}
+    )
+</code></pre>
+        </details>
+
+        <h3 id="example-b">B. Repository 隔離 Raw SQL 洩漏</h3>
+        <p>無論用 ORM 還是 Raw SQL，Repository 必須將資料列解構並封裝為純 Domain Entity 再回傳。</p>
+        <details>
+            <summary>▶ 點擊展開程式碼：repositories.py</summary>
+<pre><code># repositories.py
+class UserRepository:
+    async def get_user(self, user_id: int) -> UserEntity | None:
+        # 查詢 Raw SQL
+        row = await self.db.fetch_one("SELECT * FROM users WHERE id = :id", {"id": user_id})
+        if not row: return None
+        
+        # 攔截 Row 物件，轉譯為純 Python Entity
+        return UserEntity(
+            id=row["id"], 
+            username=row["usr_nm_db"] # 隔離資料庫命名污染
+        )
+</code></pre>
+        </details>
+
+        <h3 id="example-c">C. 外部 API 防腐層 (Gateway)</h3>
+        <p>打外部 API 與查資料庫同屬基礎設施，必須定義 Protocol 介面讓 Service 依賴。</p>
+        <details>
+            <summary>▶ 點擊展開程式碼：gateways.py 與 stripe_client.py</summary>
+<pre><code># gateways.py (Domain 層定義介面)
+from typing import Protocol
+
+class PaymentGateway(Protocol):
+    async def authorize(self, amount: int) -> bool: ...
+
+# stripe_client.py (基礎設施層實作)
+class StripeGateway:
+    async def authorize(self, amount: int) -> bool:
+        # 發送 HTTP Request
+        # 並將對方的錯誤轉譯為 Domain Exception
+        pass
+</code></pre>
+        </details>
+
+    </main>
+</div>
+
+</body>
+</html>
