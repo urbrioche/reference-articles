@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI 高可擴展性架構與防腐設計指南</title>
+    <style>
+        :root {
+            --primary: #059669;
+            --bg-color: #f8fafc;
+            --text-color: #334155;
+            --code-bg: #1e293b;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        h1 { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem; }
+        h2 { color: #0f172a; margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+        h3 { color: #334155; }
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: #f1f5f9; font-weight: 600; color: #0f172a; }
+        tr:hover { background-color: #f8fafc; }
+        pre { background-color: var(--code-bg); color: #f8fafc; padding: 1.5rem; border-radius: 8px; overflow-x: auto; font-size: 0.9rem; line-height: 1.5; }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        p code, li code { background-color: #e2e8f0; color: #b91c1c; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
+        .highlight { background-color: #d1fae5; padding: 1rem; border-left: 4px solid var(--primary); border-radius: 0 8px 8px 0; margin: 1.5rem 0; }
+        ul { padding-left: 1.5rem; }
+    </style>
+</head>
+<body>
+
+    <h1>FastAPI 乾淨架構 (Clean Architecture) 設計指南</h1>
+    <p>本指南彙整了在 FastAPI 專案中實現高內聚、低耦合，並完美防堵抽象洩漏（Leaky Abstraction）的實戰架構心法。</p>
+
+    <div class="highlight">
+        <strong>核心心法：防腐層設計 (Anti-Corruption Layer)</strong><br>
+        外層（Router/基礎設施）只能依賴內層（Service/領域），內層絕對不能知道外層（HTTP 框架、資料庫引擎）的存在。所有的資料進出都必須經過「轉譯」。
+    </div>
+
+    <h2>1. 分層職責與命名矩陣</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>架構層級</th>
+                <th>職責說明</th>
+                <th>資料載體命名建議</th>
+                <th>絕對禁止出現</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Router (對外介面)</strong></td>
+                <td>處理 HTTP 協定，擔任出入境海關轉譯資料。</td>
+                <td><code>{名詞}Request</code>, <code>{名詞}Response</code></td>
+                <td>核心業務邏輯、直接呼叫資料庫</td>
+            </tr>
+            <tr>
+                <td><strong>Service (業務邏輯)</strong></td>
+                <td>執行核心商業規則，協調 Repository 與外部 API。</td>
+                <td><code>{動詞}Command</code>, <code>{動作}Query</code></td>
+                <td>HTTP 狀態碼、Pydantic HTTP 驗證參數</td>
+            </tr>
+            <tr>
+                <td><strong>Domain (領域模型)</strong></td>
+                <td>自帶驗證的業務實體與值物件 (Value Objects)。</td>
+                <td><code>{名詞}Entity</code>, <code>Money</code>, <code>Email</code></td>
+                <td>任何框架依賴、關聯式資料庫的外鍵概念</td>
+            </tr>
+            <tr>
+                <td><strong>Repository (資料存取)</strong></td>
+                <td>封裝資料庫操作 (ORM/Raw SQL)，回傳 Entity。</td>
+                <td><code>{名詞}ORM</code>, <code>{名詞}Model</code></td>
+                <td>API Schema、業務邏輯判斷</td>
+            </tr>
+            <tr>
+                <td><strong>Gateway (外部服務)</strong></td>
+                <td>封裝對第三方 API 的 HTTP 請求。</td>
+                <td><code>{第三方}Gateway</code>, <code>{服務}Client</code></td>
+                <td>核心業務邏輯</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>2. 資料流與解耦轉譯模型 (CQRS)</h2>
+    <p>嚴格分層下，資料進出必須遵循以下轉譯路徑，確保核心層不被外部框架綁架：</p>
+    <ul>
+        <li><strong>寫入 (POST/PUT)</strong>：HTTP JSON (<code>Request</code>) ➔ Router 轉譯 ➔ <code>Command</code> ➔ Service ➔ <code>Entity</code> ➔ Router 轉譯 ➔ HTTP JSON (<code>Response</code>)</li>
+        <li><strong>讀取 (GET)</strong>：URL Params (<code>Params</code>) ➔ Router 轉譯 ➔ <code>Query</code> ➔ Service ➔ <code>Entity</code> ➔ Router 轉譯 ➔ HTTP JSON (<code>Response</code>)</li>
+    </ul>
+
+    <h2>3. 關鍵防線實作範例</h2>
+    
+    <h3>A. 統一的業務例外處理 (Domain Exceptions)</h3>
+    <p>Service 不該拋出 <code>HTTPException</code>，應拋出自訂領域例外，由 <code>main.py</code> 統一攔截。</p>
+<pre><code># core/exceptions.py
+class BaseDomainException(Exception):
+    status_code: int = 400
+    error_code: str = "DOMAIN_ERROR"
+    
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+class InsufficientBalanceError(BaseDomainException):
+    status_code = 400
+    error_code = "INSUFFICIENT_BALANCE"
+
+# main.py 攔截器
+@app.exception_handler(BaseDomainException)
+async def domain_exception_handler(request: Request, exc: BaseDomainException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error_code": exc.error_code, "message": exc.message}
+    )
+</code></pre>
+
+    <h3>B. Repository 隔離 Raw SQL 洩漏</h3>
+    <p>無論用 ORM 還是 Raw SQL，Repository 必須將資料列解構並封裝為純 Domain Entity 再回傳。</p>
+<pre><code># repositories.py
+class UserRepository:
+    async def get_user(self, user_id: int) -> UserEntity | None:
+        # 查詢 Raw SQL
+        row = await self.db.fetch_one("SELECT * FROM users WHERE id = :id", {"id": user_id})
+        if not row: return None
+        
+        # 攔截 Row 物件，轉譯為純 Python Entity
+        return UserEntity(
+            id=row["id"], 
+            username=row["usr_nm_db"] # 隔離資料庫命名污染
+        )
+</code></pre>
+
+    <h3>C. 外部 API 防腐層 (Gateway)</h3>
+    <p>打外部 API 與查資料庫同屬基礎設施，必須定義 Protocol 介面讓 Service 依賴。</p>
+<pre><code># gateways.py (Domain 層定義介面)
+class PaymentGateway(Protocol):
+    async def authorize(self, amount: int) -> bool: ...
+
+# stripe_client.py (基礎設施層實作)
+class StripeGateway:
+    async def authorize(self, amount: int) -> bool:
+        # 發送 HTTP Request, 並將對方的錯誤轉為 Domain Exception
+        pass
+</code></pre>
+
+</body>
+</html>
